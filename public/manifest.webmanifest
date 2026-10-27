@@ -1,0 +1,30 @@
+{
+  "name": "Austin's Stickers",
+  "short_name": "Stickers",
+  "description": "Austin's sea-creature sticker chart",
+  "start_url": "/austin-stickers/",
+  "display": "standalone",
+  "background_color": "#0b1b4a",
+  "theme_color": "#0b1b4a",
+  "icons": [
+    {
+      "src": "/austin-stickers/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/austin-stickers/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/austin-stickers/icon.png",
+      "sizes": "780x780",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "scope": "/austin-stickers/"
+}
