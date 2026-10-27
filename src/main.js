@@ -105,7 +105,7 @@ function startSyncLoop() {
 function celebrate() {
   celebrateEl.innerHTML = "";
   celebrateEl.className = "celebrate-on";
-  const colors = ["#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff", "#ff9cee", "#a66cff"];
+  const colors = ["#c41e3a", "#f4d35e", "#2d5bff", "#1c3faa", "#fff8e8", "#e09f1f"];
   for (let i = 0; i < 36; i++) {
     const bit = document.createElement("span");
     bit.className = "confetti";
