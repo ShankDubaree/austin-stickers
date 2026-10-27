@@ -23,7 +23,7 @@ Weeks use **ISO weeks** in **Europe/London**. Browse past weeks with Prev / Next
 1. On **Dad's iPhone**, open the live URL → **Create family** → note the 6-character family code.
 2. On **Austin's Fire tablet**, open the same URL → **Join family** → enter the code.
 3. On the phone: tap **Parent** → enter PIN (default **`1234`**) → award stickers.
-4. On the tablet: leave it on the kid chart; stickers appear within a few seconds (live sync).
+4. On the tablet: leave it on the kid chart; stickers appear within about half a minute while the tab is visible (live sync).
 
 ## Parent PIN
 
@@ -33,14 +33,21 @@ Weeks use **ISO weeks** in **Europe/London**. Browse past weeks with Prev / Next
 
 ## Family sync
 
-Sync uses a free JSON REST store ([crudcrud.com](https://crudcrud.com)) with a short **family code**.
+Sync uses [restful-api.dev](https://restful-api.dev) (`https://api.restful-api.dev/objects`) — a free JSON REST API with CORS enabled from the GitHub Pages origin (Chrome and Safari/iPhone).
 
-- Create family → generates a code and a cloud document.
-- Join family → both devices share that document.
-- Parent awards push immediately; the tablet **polls every ~4 seconds**.
+- **Create family** → generates a 6-character code, `POST`s a `fam-CODE` object, and registers the code in a small index object so other devices can find it.
+- **Join family** → looks up the code in the index, then loads that object.
+- Parent awards **push immediately** (`PUT`).
+- Devices **poll about every 25 seconds**, and **only while the page is visible** (background tabs pause) to stay within the free tier.
 - Offline: each device keeps a **localStorage** cache and syncs when back online.
 
-**Note:** crudcrud endpoints go idle after ~24 hours with *no* traffic. Daily use keeps the family data alive. If sync ever 404s after a long break, create a new family on the phone and re-join on the tablet (or contact Dad to share a fresh code).
+### Free-tier limits (important)
+
+Public restful-api.dev allows roughly **50 requests per day per client IP** (about 100/day with an API key). Phone and tablet on the same home Wi‑Fi share that budget.
+
+Typical daily use (create/join once, a handful of awards, tablet open for sticker time with 25s visible polling) should fit. If sync starts failing after heavy use, wait for the daily reset, leave the tablet tab in the background when not needed, or create/join again the next day if an object was lost.
+
+This replaced an earlier crudcrud.com backend, which was unreliable from browsers (expired keys often surfaced as CORS / “Failed to fetch”).
 
 ## Redeploy
 
