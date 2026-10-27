@@ -127,3 +127,23 @@ export function randomFamilyCode() {
 }
 
 export { isSchoolNight };
+
+/** Count every awarded sticker slot this week (brush AM/PM, sleep, homework, each poop). */
+export function weekStickerTotal(week) {
+  if (!week) return 0;
+  let n = 0;
+  for (const day of Object.values(week.brush || {})) {
+    if (day?.am) n += 1;
+    if (day?.pm) n += 1;
+  }
+  for (const day of Object.values(week.sleep || {})) {
+    if (day) n += 1;
+  }
+  for (const day of Object.values(week.homework || {})) {
+    if (day) n += 1;
+  }
+  for (const entry of Object.values(week.poop || {})) {
+    n += (entry && entry.count) || 0;
+  }
+  return n;
+}

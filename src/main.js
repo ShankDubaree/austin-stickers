@@ -24,6 +24,7 @@ import {
   randomFamilyCode,
   mergeRemote,
   isSchoolNight,
+  weekStickerTotal,
   DEFAULT_PIN,
 } from "./state.js";
 import {
@@ -32,6 +33,12 @@ import {
   pushFamilyRemote,
   startPolling,
 } from "./sync.js";
+import {
+  SPECIAL,
+  WEEK_TARGET,
+  creatureArt,
+  creatureForSlot,
+} from "./sea.js";
 
 const app = document.querySelector("#app");
 const celebrateEl = document.querySelector("#celebrate");
@@ -121,12 +128,9 @@ function celebrate() {
   }, 1600);
 }
 
-function stickerGlyph(kind) {
-  if (kind === "brush") return "🪥";
-  if (kind === "poop") return "⭐";
-  if (kind === "homework") return "📚";
-  if (kind === "sleep") return "🛏️";
-  return "⭐";
+function stickerArt(category, dateKey, slot = "", size = 40) {
+  const c = creatureForSlot(category, dateKey, slot);
+  return creatureArt(c, size);
 }
 
 function syncLabel() {
@@ -311,18 +315,53 @@ function bindPin() {
   });
 }
 
+
+function slotCell(filled, category, dateKey, slot = "") {
+  const art = filled ? stickerArt(category, dateKey, slot, 40) : "";
+  return `<div class="slot ${filled ? "filled" : "empty"}" aria-label="${filled ? "sticker" : "empty"}">
+    ${filled ? `<span class="sticker sea-sticker">${art}</span>` : ""}
+  </div>`;
+}
+
+function poopSlotCell(n, dateKey) {
+  if (!n) {
+    return `<div class="slot empty" aria-label="empty"></div>`;
+  }
+  const art = stickerArt("poop", dateKey, "1", 40);
+  const count = n > 1 ? `<span class="count">×${n}</span>` : "";
+  return `<div class="slot filled" aria-label="${n} sticker${n === 1 ? "" : "s"}">
+    <span class="sticker sea-sticker pop">${art}</span>${count}
+  </div>`;
+}
+
+function pufferProgress(total) {
+  const art = creatureArt(SPECIAL, 120);
+  return `
+    <section class="card puffer-card" aria-label="Weekly sticker progress">
+      <div class="puffer-wrap">
+        <div class="puffer-fish">${art}</div>
+        <div class="puffer-score">
+          <p class="puffer-label">This week</p>
+          <p class="puffer-nums"><span class="puffer-have">${total}</span> / <span class="puffer-goal">${WEEK_TARGET}</span></p>
+          <p class="puffer-target">Target ${WEEK_TARGET} stickers</p>
+        </div>
+      </div>
+    </section>`;
+}
+
 function kidHtml() {
+  viewWeek = thisWeekKey();
   const week = ensureWeek(state, viewWeek);
   const days = daysOfWeek(viewWeek);
   const today = todayKey();
-  const isCurrent = viewWeek === thisWeekKey();
+  const total = weekStickerTotal(week);
 
   return `
   <main class="shell kid">
     <header class="topbar">
       <div>
         <p class="eyebrow">Austin's stickers</p>
-        <h1>${escapeHtml(formatWeekTitle(viewWeek))}${isCurrent ? " · this week" : ""}</h1>
+        <h1>${escapeHtml(formatWeekTitle(viewWeek))} · this week</h1>
       </div>
       <div class="top-actions">
         <span class="pill" title="${escapeHtml(syncError)}">${escapeHtml(syncLabel())}</span>
@@ -330,24 +369,7 @@ function kidHtml() {
       </div>
     </header>
 
-    <nav class="week-nav" aria-label="Week">
-      <button type="button" class="btn" id="btn-prev">← Prev</button>
-      <button type="button" class="btn" id="btn-today" ${isCurrent ? "disabled" : ""}>This week</button>
-      <button type="button" class="btn" id="btn-next">Next →</button>
-    </nav>
-
-    <section class="card category">
-      <h2><span class="ico">🪥</span> Brush teeth</h2>
-      <p class="hint">Morning and evening — every day</p>
-      <div class="grid brush-grid">
-        <div class="corner"></div>
-        ${days.map((d) => `<div class="day-h ${d.key === today ? "today" : ""}">${d.name}</div>`).join("")}
-        <div class="slot-label">AM</div>
-        ${days.map((d) => slotCell(hasBrush(week, d.key, "am"), "brush")).join("")}
-        <div class="slot-label">PM</div>
-        ${days.map((d) => slotCell(hasBrush(week, d.key, "pm"), "brush")).join("")}
-      </div>
-    </section>
+    ${pufferProgress(total)}
 
     <section class="card category">
       <h2><span class="ico">🛏️</span> Sleep in own bed</h2>
@@ -356,8 +378,36 @@ function kidHtml() {
         ${days.map((d) => `
           <div class="day-col ${d.key === today ? "today" : ""}">
             <div class="day-h">${d.name}</div>
-            ${slotCell(hasSleep(week, d.key), "sleep")}
+            ${slotCell(hasSleep(week, d.key), "sleep", d.key)}
           </div>`).join("")}
+      </div>
+    </section>
+
+    <section class="card category">
+      <h2><span class="ico">🪥</span> Brush Teeth</h2>
+      <p class="hint">Morning and evening — every day</p>
+      <div class="grid brush-grid">
+        <div class="corner"></div>
+        ${days.map((d) => `<div class="day-h ${d.key === today ? "today" : ""}">${d.name}</div>`).join("")}
+        <div class="slot-label">AM</div>
+        ${days.map((d) => slotCell(hasBrush(week, d.key, "am"), "brush", d.key, "am")).join("")}
+        <div class="slot-label">PM</div>
+        ${days.map((d) => slotCell(hasBrush(week, d.key, "pm"), "brush", d.key, "pm")).join("")}
+      </div>
+    </section>
+
+    <section class="card category">
+      <h2><span class="ico">⭐</span> Poop</h2>
+      <p class="hint">As needed — a sea creature when it happens</p>
+      <div class="row-slots">
+        ${days.map((d) => {
+          const n = poopCount(week, d.key);
+          return `
+          <div class="day-col ${d.key === today ? "today" : ""}">
+            <div class="day-h">${d.name}</div>
+            ${poopSlotCell(n, d.key)}
+          </div>`;
+        }).join("")}
       </div>
     </section>
 
@@ -370,24 +420,7 @@ function kidHtml() {
           return `
           <div class="day-col ${d.key === today ? "today" : ""} ${school ? "" : "muted"}">
             <div class="day-h">${d.name}</div>
-            ${school ? slotCell(hasHomework(week, d.key), "homework") : `<div class="slot empty off">—</div>`}
-          </div>`;
-        }).join("")}
-      </div>
-    </section>
-
-    <section class="card category">
-      <h2><span class="ico">⭐</span> Poop</h2>
-      <p class="hint">As needed — stars when it happens</p>
-      <div class="row-slots">
-        ${days.map((d) => {
-          const n = poopCount(week, d.key);
-          return `
-          <div class="day-col ${d.key === today ? "today" : ""}">
-            <div class="day-h">${d.name}</div>
-            <div class="slot ${n ? "filled" : "empty"}" aria-label="${n} star${n === 1 ? "" : "s"}">
-              ${n ? `<span class="sticker pop">⭐</span><span class="count">${n > 1 ? "×" + n : ""}</span>` : ""}
-            </div>
+            ${school ? slotCell(hasHomework(week, d.key), "homework", d.key) : `<div class="slot empty off">—</div>`}
           </div>`;
         }).join("")}
       </div>
@@ -397,25 +430,8 @@ function kidHtml() {
   </main>`;
 }
 
-function slotCell(filled, kind) {
-  return `<div class="slot ${filled ? "filled" : "empty"}" aria-label="${filled ? "sticker" : "empty"}">
-    ${filled ? `<span class="sticker">${stickerGlyph(kind)}</span>` : ""}
-  </div>`;
-}
 
 function bindKid() {
-  document.getElementById("btn-prev")?.addEventListener("click", () => {
-    viewWeek = shiftIsoWeek(viewWeek, -1);
-    render();
-  });
-  document.getElementById("btn-next")?.addEventListener("click", () => {
-    viewWeek = shiftIsoWeek(viewWeek, 1);
-    render();
-  });
-  document.getElementById("btn-today")?.addEventListener("click", () => {
-    viewWeek = thisWeekKey();
-    render();
-  });
   document.getElementById("btn-parent")?.addEventListener("click", () => {
     pinDigits = "";
     pinError = "";
@@ -452,11 +468,11 @@ function adminHtml() {
     <section class="card">
       <h2>Today · ${london.weekday} ${london.day}/${london.month}</h2>
       <div class="award-list">
-        ${awardRow("brush-am", "🪥 Brush teeth — morning", hasBrush(week, today, "am"))}
-        ${awardRow("brush-pm", "🪥 Brush teeth — evening", hasBrush(week, today, "pm"))}
         ${awardRow("sleep", "🛏️ Sleep in own bed", hasSleep(week, today))}
-        ${isSchoolNight(today) ? awardRow("homework", "📚 Homework", hasHomework(week, today)) : `<p class="hint">No homework slot tonight (weekend / Friday).</p>`}
+        ${awardRow("brush-am", "🪥 Brush Teeth — morning", hasBrush(week, today, "am"))}
+        ${awardRow("brush-pm", "🪥 Brush Teeth — evening", hasBrush(week, today, "pm"))}
         ${poopRow(poopCount(week, today))}
+        ${isSchoolNight(today) ? awardRow("homework", "📚 Homework", hasHomework(week, today)) : `<p class="hint">No homework slot tonight (weekend / Friday).</p>`}
       </div>
     </section>
 
@@ -466,17 +482,17 @@ function adminHtml() {
         ${days.map((d) => `
           <div class="admin-day ${d.key === today ? "today" : ""}">
             <div class="day-h">${d.label}</div>
+            <button type="button" class="chip ${hasSleep(week, d.key) ? "on" : ""}" data-act="toggle-sleep" data-day="${d.key}">Own bed</button>
             <button type="button" class="chip ${hasBrush(week, d.key, "am") ? "on" : ""}" data-act="toggle-brush" data-day="${d.key}" data-slot="am">AM brush</button>
             <button type="button" class="chip ${hasBrush(week, d.key, "pm") ? "on" : ""}" data-act="toggle-brush" data-day="${d.key}" data-slot="pm">PM brush</button>
-            <button type="button" class="chip ${hasSleep(week, d.key) ? "on" : ""}" data-act="toggle-sleep" data-day="${d.key}">Own bed</button>
+            <div class="poop-mini">
+              <button type="button" class="chip" data-act="poop-add" data-day="${d.key}">Poop +</button>
+              <span class="mini-count">${poopCount(week, d.key) ? "×" + poopCount(week, d.key) : "—"}</span>
+              <button type="button" class="chip ghost" data-act="poop-undo" data-day="${d.key}" ${poopCount(week, d.key) ? "" : "disabled"}>Undo</button>
+            </div>
             ${isSchoolNight(d.key)
               ? `<button type="button" class="chip ${hasHomework(week, d.key) ? "on" : ""}" data-act="toggle-hw" data-day="${d.key}">Homework</button>`
               : `<span class="chip off">No HW</span>`}
-            <div class="poop-mini">
-              <button type="button" class="chip" data-act="poop-add" data-day="${d.key}">Poop +</button>
-              <span class="mini-count">${poopCount(week, d.key) ? "⭐×" + poopCount(week, d.key) : "—"}</span>
-              <button type="button" class="chip ghost" data-act="poop-undo" data-day="${d.key}" ${poopCount(week, d.key) ? "" : "disabled"}>Undo</button>
-            </div>
           </div>`).join("")}
       </div>
     </section>
@@ -511,7 +527,7 @@ function awardRow(id, label, on) {
 function poopRow(n) {
   return `
     <div class="award-row">
-      <span class="award-label">⭐ Poop ${n ? `(${n} today)` : ""}</span>
+      <span class="award-label">Poop ${n ? `(${n} today)` : ""}</span>
       <div class="award-btns">
         <button type="button" class="btn primary" data-award="poop" data-mode="give">Award</button>
         <button type="button" class="btn" data-award="poop" data-mode="undo" ${n ? "" : "disabled"}>Undo</button>

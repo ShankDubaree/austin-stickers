@@ -2,7 +2,7 @@
 
 A calm, ADHD-friendly digital sticker chart for Austin (Year 2).
 
-- **Kid view (default):** read-only weekly chart — big stickers, soft colours, large tap targets for Amazon Fire (Silk).
+- **Kid view (default):** read-only current-week chart — sea-creature stickers, golden puffer progress to 20, Spider-Man colours, Fire-tablet-friendly.
 - **Parent mode (iPhone):** unlock with a 4-digit PIN to award or undo stickers. Only Dad awards stickers.
 
 Live URL (GitHub Pages): **https://shankdubaree.github.io/austin-stickers/**
@@ -11,12 +11,12 @@ Live URL (GitHub Pages): **https://shankdubaree.github.io/austin-stickers/**
 
 | Category | When |
 |---|---|
-| Brush teeth | Morning + evening, every day |
 | Sleep in own bed | One sticker per night |
+| Brush Teeth | Morning + evening, every day |
+| Poop | As needed (award one at a time, with undo) |
 | Homework | School nights Mon–Thu |
-| Poop | As needed (award one star at a time, with undo) |
 
-Weeks use **ISO weeks** in **Europe/London**. Browse past weeks with Prev / Next.
+Filled sticker slots show **sea creatures** (same set as the homework app). Kid view always shows the **current week** (Europe/London ISO week) with a big golden puffer fish progress of **total / 20**. Parent mode can still browse weeks to adjust.
 
 ## Quick start
 
