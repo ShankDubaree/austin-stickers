@@ -208,7 +208,10 @@ function bindSetup() {
       syncStatus = "ok";
       render();
     } catch (e) {
-      setupError = e.message || "Could not create family. Check the internet and try again.";
+      setupError =
+        e.message === "Failed to fetch" || e.message === "Load failed"
+          ? "Could not reach the sync server. Check Wi‑Fi and try again."
+          : e.message || "Could not create family. Check the internet and try again.";
       createBtn.disabled = false;
       createBtn.textContent = "Create family";
       render();

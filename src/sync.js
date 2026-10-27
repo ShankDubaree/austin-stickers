@@ -4,7 +4,7 @@
  * Endpoint expires after ~24h of total inactivity — daily use keeps it alive.
  */
 
-const SYNC_BASE = "https://crudcrud.com/api/0858aa4afb2e4990a258763d23106037";
+const SYNC_BASE = "https://crudcrud.com/api/b7dad902edd24ea383df0f85bc6752f1";
 const POLL_MS = 4000;
 
 function famUrl(code) {
