@@ -26,6 +26,10 @@ import {
   isSchoolNight,
   weekStickerTotal,
   DEFAULT_PIN,
+  loadFamilyCookie,
+  clearFamilyCookie,
+  clearLocalStorage,
+  saveFamilyCookie,
 } from "./state.js";
 import {
   createFamilyRemote,
@@ -54,6 +58,45 @@ let setupError = "";
 let joinCode = "";
 let stopPoll = null;
 let pushTimer = null;
+
+/** Read family code from ?family= or #family= (uppercase). */
+function familyCodeFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    let code = (params.get("family") || "").trim().toUpperCase();
+    if (!code && window.location.hash) {
+      const hash = window.location.hash.replace(/^#/, "");
+      const hp = new URLSearchParams(hash.includes("=") ? hash : "");
+      code = (hp.get("family") || "").trim().toUpperCase();
+      if (!code) {
+        const m = hash.match(/(?:^|[&#?])family=([A-Za-z0-9]+)/i);
+        if (m) code = m[1].toUpperCase();
+      }
+    }
+    return code.replace(/[^A-Z0-9]/g, "").slice(0, 8) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep app on a stable URL that includes the family code (preserve base path). */
+function replaceFamilyUrl(code) {
+  try {
+    const url = new URL(window.location.href);
+    if (code) {
+      url.searchParams.set("family", String(code).toUpperCase());
+    } else {
+      url.searchParams.delete("family");
+    }
+    // Drop hash family if present so query is the single source
+    if (url.hash && /family=/i.test(url.hash)) {
+      url.hash = "";
+    }
+    history.replaceState(null, "", url.pathname + url.search + url.hash);
+  } catch {
+    /* ignore */
+  }
+}
 
 function persist() {
   saveLocal(state);
@@ -184,6 +227,7 @@ function setupHtml() {
       <button type="button" class="btn" id="btn-join">Join family</button>
     </section>
     ${setupError ? `<p class="error" role="alert">${escapeHtml(setupError)}</p>` : ""}
+    <p class="hint setup-hint">After joining once, remove &amp; re-add the Fire home-screen shortcut so the link includes the family code — then the tablet won’t ask for it again.</p>
   </main>`;
 }
 
@@ -207,6 +251,8 @@ function bindSetup() {
       const id = await createFamilyRemote(code, fresh);
       state = { ...fresh, familyCode: code, remoteId: id };
       persist();
+      saveFamilyCookie(code, id);
+      replaceFamilyUrl(code);
       mode = "admin";
       startSyncLoop();
       syncStatus = "ok";
@@ -247,6 +293,8 @@ function bindSetup() {
         remoteId: found.id,
       };
       persist();
+      saveFamilyCookie(code, found.id);
+      replaceFamilyUrl(code);
       mode = "kid";
       startSyncLoop();
       syncStatus = "ok";
@@ -624,6 +672,9 @@ function bindAdmin() {
     if (!confirm("Leave this family on this device? Stickers stay in the cloud for other devices.")) return;
     if (stopPoll) stopPoll();
     state = emptyState();
+    clearLocalStorage();
+    clearFamilyCookie();
+    replaceFamilyUrl(null);
     persist();
     mode = "boot";
     joinCode = "";
@@ -640,16 +691,41 @@ function escapeHtml(s) {
 }
 
 /* boot */
-if (state.familyCode && state.remoteId) {
+async function joinFromCode(code, preferKid = true) {
+  const found = await findFamilyRemote(code);
+  if (!found) {
+    throw new Error("No family found for that code. Check it and try again.");
+  }
+  const keepAdmin =
+    !preferKid &&
+    state.familyCode === code &&
+    mode === "admin";
+  state = {
+    ...emptyState(),
+    ...found.state,
+    familyCode: code,
+    remoteId: found.id,
+  };
+  persist();
+  saveFamilyCookie(code, found.id);
+  replaceFamilyUrl(code);
+  mode = keepAdmin ? "admin" : "kid";
+  startSyncLoop();
+  syncStatus = "ok";
+  return found;
+}
+
+function enterExistingFamily(code) {
+  replaceFamilyUrl(code);
   mode = "kid";
   startSyncLoop();
-  // immediate pull
-  findFamilyRemote(state.familyCode)
+  findFamilyRemote(code)
     .then((found) => {
       if (found) {
         state.remoteId = found.id;
         state = mergeRemote(state, found.state);
         persist();
+        saveFamilyCookie(code, found.id);
         syncStatus = "ok";
         render();
       }
@@ -658,7 +734,65 @@ if (state.familyCode && state.remoteId) {
       syncStatus = "error";
       render();
     });
-} else {
-  mode = "boot";
 }
-render();
+
+async function boot() {
+  const urlCode = familyCodeFromUrl();
+  const cookie = loadFamilyCookie();
+
+  // Prefer URL code (home-screen shortcut is source of truth on tablet)
+  if (urlCode) {
+    if (state.familyCode === urlCode && state.remoteId) {
+      enterExistingFamily(urlCode);
+      render();
+      return;
+    }
+    // missing / mismatched local → prefer URL; clear local so a failed lookup shows setup
+    if (state.familyCode && state.familyCode !== urlCode) {
+      state = emptyState();
+      clearLocalStorage();
+      clearFamilyCookie();
+    }
+    mode = "boot";
+    setupError = "";
+    joinCode = urlCode;
+    render();
+    try {
+      await joinFromCode(urlCode, true);
+      render();
+    } catch (e) {
+      setupError = e.message || "Could not join from the link. Check Wi‑Fi and try again.";
+      mode = "boot";
+      render();
+    }
+    return;
+  }
+
+  // No URL code: restore from cookie if localStorage empty/missing family
+  if ((!state.familyCode || !state.remoteId) && cookie && cookie.familyCode) {
+    mode = "boot";
+    joinCode = cookie.familyCode;
+    render();
+    try {
+      await joinFromCode(cookie.familyCode, true);
+      render();
+    } catch (e) {
+      setupError = e.message || "Could not restore family. Enter the code once more.";
+      mode = "boot";
+      render();
+    }
+    return;
+  }
+
+  if (state.familyCode && state.remoteId) {
+    replaceFamilyUrl(state.familyCode);
+    enterExistingFamily(state.familyCode);
+    render();
+    return;
+  }
+
+  mode = "boot";
+  render();
+}
+
+boot();

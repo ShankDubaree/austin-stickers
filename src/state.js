@@ -1,6 +1,9 @@
 import { isoWeekKey, londonDateKey, isSchoolNight } from "./week.js";
 
 const STORAGE_KEY = "austin-stickers-v1";
+const COOKIE_NAME = "austin-stickers-fam";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // ~1 year
+const COOKIE_PATH = "/austin-stickers/";
 
 export const DEFAULT_PIN = "1234";
 
@@ -17,6 +20,74 @@ export function emptyState() {
   };
 }
 
+function readCookie(name) {
+  try {
+    const parts = String(document.cookie || "").split(";");
+    for (const part of parts) {
+      const idx = part.indexOf("=");
+      if (idx === -1) continue;
+      const k = part.slice(0, idx).trim();
+      if (k !== name) continue;
+      return decodeURIComponent(part.slice(idx + 1).trim());
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeCookie(name, value, maxAge) {
+  try {
+    const encoded = encodeURIComponent(value);
+    document.cookie = `${name}=${encoded}; Path=${COOKIE_PATH}; Max-Age=${maxAge}; SameSite=Lax`;
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearCookie(name) {
+  try {
+    document.cookie = `${name}=; Path=${COOKIE_PATH}; Max-Age=0; SameSite=Lax`;
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Persist familyCode (+ remoteId when known) in a first-party cookie backup. */
+export function saveFamilyCookie(familyCode, remoteId) {
+  if (!familyCode) {
+    clearCookie(COOKIE_NAME);
+    return;
+  }
+  const payload = { familyCode: String(familyCode).toUpperCase() };
+  if (remoteId) payload.remoteId = String(remoteId);
+  writeCookie(COOKIE_NAME, JSON.stringify(payload), COOKIE_MAX_AGE);
+}
+
+export function loadFamilyCookie() {
+  const raw = readCookie(COOKIE_NAME);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const code = parsed && parsed.familyCode
+      ? String(parsed.familyCode).toUpperCase().replace(/[^A-Z0-9]/g, "")
+      : "";
+    if (!code) return null;
+    return {
+      familyCode: code,
+      remoteId: parsed.remoteId ? String(parsed.remoteId) : null,
+    };
+  } catch {
+    // legacy plain-code cookie
+    const code = String(raw).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return code ? { familyCode: code, remoteId: null } : null;
+  }
+}
+
+export function clearFamilyCookie() {
+  clearCookie(COOKIE_NAME);
+}
+
 export function loadLocal() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -29,7 +100,22 @@ export function loadLocal() {
 }
 
 export function saveLocal(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // quota / security errors — keep session in memory; cookie still backs family
+  }
+  if (state && state.familyCode) {
+    saveFamilyCookie(state.familyCode, state.remoteId);
+  }
+}
+
+export function clearLocalStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function mergeRemote(local, remote) {
