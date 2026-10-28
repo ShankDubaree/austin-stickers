@@ -548,7 +548,7 @@ function tabletKidUrl() {
     String(code).toUpperCase() === AUSTIN_SHORT_FAMILY &&
     String(id) === AUSTIN_SHORT_ID
   ) {
-    return `${window.location.origin}/austin-stickers/a`;
+    return `${window.location.origin}/austin-stickers/a/`;
   }
   const base = `${window.location.origin}/austin-stickers/kid.html`;
   const params = new URLSearchParams();
