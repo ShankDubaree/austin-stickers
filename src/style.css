@@ -644,3 +644,170 @@ button {
   font-weight: 800;
   color: var(--muted);
 }
+
+/* ---------- Prize wheel ---------- */
+.wheel-card h2 { margin-bottom: 6px; }
+.wheel-card.locked .wheel-lock {
+  font-size: 3rem;
+  margin: 12px 0 4px;
+  filter: grayscale(0.2);
+}
+.wheel-stage {
+  position: relative;
+  width: min(280px, 78vw);
+  margin: 16px auto 12px;
+  aspect-ratio: 1;
+}
+.wheel-pointer {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-top: 22px solid var(--gold);
+  z-index: 4;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35));
+}
+.wheel {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 5px solid var(--navy);
+  box-shadow:
+    0 0 0 4px var(--gold),
+    0 10px 28px rgba(0,0,0,0.35);
+  position: relative;
+  overflow: hidden;
+  background: var(--navy-deep);
+  transform: rotate(0deg);
+}
+.wheel.spinning {
+  transition: transform 4.2s cubic-bezier(0.12, 0.75, 0.12, 1);
+  transform: rotate(var(--spin-end, 1440deg));
+}
+.wheel-segs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  /* conic slices via background */
+  background: conic-gradient(
+    from 0deg,
+    #c41e3a 0deg 72deg,
+    #1c3faa 72deg 144deg,
+    #e09f1f 144deg 216deg,
+    #2d5bff 216deg 288deg,
+    #8b1111 288deg 360deg
+  );
+}
+.wheel-seg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14%;
+  transform: rotate(calc(var(--i) * var(--seg) + var(--seg) / 2));
+  pointer-events: none;
+}
+.wheel-seg span {
+  transform: rotate(0deg);
+  font-size: 0.72rem;
+  font-weight: 900;
+  color: var(--cream);
+  text-shadow: 1px 1px 0 var(--navy);
+  text-align: center;
+  max-width: 72px;
+  line-height: 1.15;
+}
+.wheel-hub {
+  position: absolute;
+  inset: 38%;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 3px solid var(--navy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: var(--navy);
+  font-weight: 900;
+  z-index: 2;
+}
+.wheel-spin-btn {
+  width: 100%;
+  font-size: 1.15rem;
+  min-height: 58px;
+  margin-top: 8px;
+}
+.wheel-result {
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--gold);
+  margin: 8px 0 0;
+  animation: pop-in 0.45s ease;
+}
+.wheel-card.won {
+  box-shadow:
+    0 0 0 4px var(--gold),
+    0 0 28px rgba(244, 211, 94, 0.45),
+    0 16px 40px rgba(0, 0, 0, 0.35);
+}
+.prize-log-wrap { margin-top: 14px; }
+.prize-log-title {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  color: var(--gold);
+  font-weight: 800;
+}
+.prize-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prize-log li {
+  background: var(--navy-deep);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+}
+.prize-week {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.tablet-link {
+  word-break: break-all;
+  background: var(--navy-deep);
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--cream);
+  margin: 10px 0;
+}
+.copy-status {
+  color: var(--ok) !important;
+  font-weight: 800;
+}
+.kid-only .foot { margin-top: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel.spinning {
+    transition: none;
+  }
+  .wheel-result { animation: none; }
+}

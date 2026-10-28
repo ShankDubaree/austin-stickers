@@ -13,6 +13,7 @@ export function emptyState() {
     pin: DEFAULT_PIN,
     updatedAt: Date.now(),
     weeks: {},
+    prizes: [],
     muteSound: true,
     // local-only fields persisted in localStorage too:
     familyCode: null,
@@ -93,7 +94,12 @@ export function loadLocal() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyState();
     const parsed = JSON.parse(raw);
-    return { ...emptyState(), ...parsed, weeks: parsed.weeks || {} };
+    return {
+      ...emptyState(),
+      ...parsed,
+      weeks: parsed.weeks || {},
+      prizes: Array.isArray(parsed.prizes) ? parsed.prizes : [],
+    };
   } catch {
     return emptyState();
   }
@@ -126,6 +132,7 @@ export function mergeRemote(local, remote) {
       ...local,
       pin: remote.pin || local.pin,
       weeks: remote.weeks || {},
+      prizes: Array.isArray(remote.prizes) ? remote.prizes : (local.prizes || []),
       muteSound: remote.muteSound ?? local.muteSound,
       updatedAt: remote.updatedAt || local.updatedAt,
     };
@@ -232,4 +239,42 @@ export function weekStickerTotal(week) {
     n += (entry && entry.count) || 0;
   }
   return n;
+}
+
+/** Per-family last-good cache (kid view offline fallback). */
+export function familyCacheKey(code) {
+  return `austin-stickers-fam-cache-${String(code || "").toUpperCase()}`;
+}
+
+export function cacheFamilyState(code, state) {
+  if (!code || !state) return;
+  try {
+    const payload = {
+      ...state,
+      familyCode: String(code).toUpperCase(),
+      remoteId: state.remoteId || null,
+      cachedAt: Date.now(),
+    };
+    localStorage.setItem(familyCacheKey(code), JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadCachedFamily(code) {
+  if (!code) return null;
+  try {
+    const raw = localStorage.getItem(familyCacheKey(code));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      ...emptyState(),
+      ...parsed,
+      weeks: parsed.weeks || {},
+      prizes: Array.isArray(parsed.prizes) ? parsed.prizes : [],
+      familyCode: String(code).toUpperCase(),
+    };
+  } catch {
+    return null;
+  }
 }

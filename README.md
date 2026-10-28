@@ -13,7 +13,7 @@ Live URL (GitHub Pages): **https://shankdubaree.github.io/austin-stickers/**
 |---|---|
 | Sleep in own bed | One sticker per night |
 | Brush Teeth | Morning + evening, every day |
-| Poop | As needed (award one at a time, with undo) |
+| Toilet | As needed (award one at a time, with undo). Stored as `poop` in sync data. |
 | Homework | School nights Mon–Thu |
 
 Filled sticker slots show **sea creatures** (same set as the homework app). Kid view always shows the **current week** (Europe/London ISO week) with a big golden puffer fish progress of **total / 20**. Parent mode can still browse weeks to adjust.
@@ -21,9 +21,13 @@ Filled sticker slots show **sea creatures** (same set as the homework app). Kid 
 ## Quick start
 
 1. On **Dad's iPhone**, open the live URL → **Create family** → note the 6-character family code.
-2. On **Austin's Fire tablet**, open the same URL → **Join family** → enter the code.
-3. On the phone: tap **Parent** → enter PIN (default **`1234`**) → award stickers.
-4. On the tablet: leave it on the kid chart; stickers appear within about half a minute while the tab is visible (live sync).
+2. In **Parent mode**, copy **Austin’s tablet link** (includes `kid.html?family=…&id=…`).
+3. On **Austin's Fire tablet**, open that dedicated link (view-only — no join/PIN). Pin it to the home screen.
+4. On the phone: tap **Parent** → enter PIN → award stickers.
+5. On the tablet: leave `kid.html` open; stickers poll about every 45s while visible. At **20/20** the prize wheel unlocks (one spin per week; wins sync into the prize log).
+
+Main app: **https://shankdubaree.github.io/austin-stickers/**  
+Kid (tablet) example: **https://shankdubaree.github.io/austin-stickers/kid.html?family=CODE&id=REMOTE_ID**
 
 ## Parent PIN
 

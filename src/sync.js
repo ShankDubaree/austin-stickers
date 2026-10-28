@@ -16,6 +16,8 @@ const INDEX_NAME = "austin-stickers-fam-index";
 /** Secondary code→id map (user-created objects are not in GET /objects). */
 const INDEX_ID = "ff808181a09d98f701a17f1eff6b2dc8";
 const POLL_MS = 25000;
+/** Slower poll for dedicated kid view (rate-limit friendly). */
+const KID_POLL_MS = 45000;
 const CREATE_RETRIES = 3;
 
 function famName(code) {
@@ -187,14 +189,22 @@ export async function pullFamilyRemote(code, id) {
   }
 }
 
-export function startPolling(getMeta, onRemote, onError) {
+/**
+ * Poll while the page is visible.
+ * @param {() => {code:string,id:string}|null} getMeta
+ * @param {(state:object,id:string) => void} onRemote
+ * @param {(e:Error) => void} [onError]
+ * @param {{ intervalMs?: number }} [opts]
+ */
+export function startPolling(getMeta, onRemote, onError, opts = {}) {
+  const intervalMs = opts.intervalMs || POLL_MS;
   let stopped = false;
   let timer = null;
 
   async function tick() {
     if (stopped) return;
     const schedule = () => {
-      if (!stopped) timer = setTimeout(tick, POLL_MS);
+      if (!stopped) timer = setTimeout(tick, intervalMs);
     };
 
     if (typeof document !== "undefined" && document.visibilityState !== "visible") {
@@ -203,12 +213,12 @@ export function startPolling(getMeta, onRemote, onError) {
     }
 
     const meta = getMeta();
-    if (!meta || !meta.code || !meta.id) {
+    if (!meta || !meta.id) {
       schedule();
       return;
     }
     try {
-      const remote = await pullFamilyRemote(meta.code, meta.id);
+      const remote = await pullFamilyRemote(meta.code || "", meta.id);
       if (remote && remote.state) onRemote(remote.state, remote.id);
     } catch (e) {
       if (onError) onError(e);
@@ -224,22 +234,42 @@ export function startPolling(getMeta, onRemote, onError) {
       document.visibilityState === "visible"
     ) {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(tick, 500);
+      timer = setTimeout(tick, 400);
+    }
+  }
+
+  function onFocus() {
+    if (!stopped) {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(tick, 200);
     }
   }
 
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", onVisibility);
   }
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", onFocus);
+  }
 
-  timer = setTimeout(tick, POLL_MS);
+  // First pull soon so kid page isn't waiting a full interval
+  timer = setTimeout(tick, opts.immediate ? 100 : intervalMs);
   return () => {
     stopped = true;
     if (timer) clearTimeout(timer);
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", onVisibility);
     }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", onFocus);
+    }
   };
 }
 
-export { POLL_MS, SYNC_BASE, INDEX_ID };
+/** Pull family state by remote object id only (skip index lookup). */
+export async function pullByRemoteId(id) {
+  if (!id) return null;
+  return pullFamilyRemote("", id);
+}
+
+export { POLL_MS, KID_POLL_MS, SYNC_BASE, INDEX_ID };

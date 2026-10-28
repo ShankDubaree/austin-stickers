@@ -43,6 +43,15 @@ import {
   creatureArt,
   creatureForSlot,
 } from "./sea.js";
+import {
+  prizeForWeek,
+  addPrize,
+  clearPrizeForWeek,
+  pickRandomPrize,
+  prizeIndex,
+  wheelCardHtml,
+  animateWheelSpin,
+} from "./prize.js";
 
 const app = document.querySelector("#app");
 const celebrateEl = document.querySelector("#celebrate");
@@ -419,6 +428,21 @@ function kidHtml() {
 
     ${pufferProgress(total)}
 
+    ${(() => {
+      const result = prizeForWeek(state, viewWeek);
+      const recent = Array.isArray(state.prizes) ? state.prizes : [];
+      return wheelCardHtml({
+        unlocked: total >= WEEK_TARGET,
+        total,
+        target: WEEK_TARGET,
+        weekKey: viewWeek,
+        result,
+        spinning: false,
+        recentWins: recent,
+        showSpinButton: true,
+      });
+    })()}
+
     <section class="card category">
       <h2><span class="ico">🛏️</span> Sleep in own bed</h2>
       <p class="hint">One sticker each night</p>
@@ -445,7 +469,7 @@ function kidHtml() {
     </section>
 
     <section class="card category">
-      <h2><span class="ico">⭐</span> Poop</h2>
+      <h2><span class="ico">🚽</span> Toilet</h2>
       <p class="hint">As needed — a sea creature when it happens</p>
       <div class="row-slots">
         ${days.map((d) => {
@@ -479,6 +503,8 @@ function kidHtml() {
 }
 
 
+let kidSpinning = false;
+
 function bindKid() {
   document.getElementById("btn-parent")?.addEventListener("click", () => {
     pinDigits = "";
@@ -486,6 +512,50 @@ function bindKid() {
     mode = "pin";
     render();
   });
+
+  document.getElementById("btn-spin")?.addEventListener("click", () => {
+    if (kidSpinning) return;
+    const weekKey = thisWeekKey();
+    const week = ensureWeek(state, weekKey);
+    if (weekStickerTotal(week) < WEEK_TARGET) return;
+    if (prizeForWeek(state, weekKey)) return;
+    const prize = pickRandomPrize();
+    kidSpinning = true;
+    // Re-render with spinning state via temporary flag in wheel — simplify: animate then commit
+    const wheelEl = document.getElementById("prize-wheel");
+    const btn = document.getElementById("btn-spin");
+    if (btn) btn.disabled = true;
+    animateWheelSpin(wheelEl, prizeIndex(prize), () => {
+      addPrize(state, weekKey, prize);
+      touch();
+      kidSpinning = false;
+      celebrate();
+      render();
+    });
+  });
+}
+
+
+function tabletKidUrl() {
+  const code = state.familyCode || "";
+  const id = state.remoteId || "";
+  const base = `${window.location.origin}/austin-stickers/kid.html`;
+  const params = new URLSearchParams();
+  if (code) params.set("family", code);
+  if (id) params.set("id", id);
+  const q = params.toString();
+  return q ? `${base}?${q}` : base;
+}
+
+function prizeLogAdminHtml() {
+  const list = Array.isArray(state.prizes) ? state.prizes : [];
+  if (!list.length) return `<p class="hint">No prizes logged yet. The wheel unlocks at ${WEEK_TARGET}/${WEEK_TARGET} stickers.</p>`;
+  return `<ul class="prize-log admin-prize-log">${list
+    .map(
+      (w) =>
+        `<li><span class="prize-week">${escapeHtml(w.week)}</span> · <strong>${escapeHtml(w.prize)}</strong></li>`
+    )
+    .join("")}</ul>`;
 }
 
 function adminHtml() {
@@ -534,7 +604,7 @@ function adminHtml() {
             <button type="button" class="chip ${hasBrush(week, d.key, "am") ? "on" : ""}" data-act="toggle-brush" data-day="${d.key}" data-slot="am">AM brush</button>
             <button type="button" class="chip ${hasBrush(week, d.key, "pm") ? "on" : ""}" data-act="toggle-brush" data-day="${d.key}" data-slot="pm">PM brush</button>
             <div class="poop-mini">
-              <button type="button" class="chip" data-act="poop-add" data-day="${d.key}">Poop +</button>
+              <button type="button" class="chip" data-act="poop-add" data-day="${d.key}">Toilet +</button>
               <span class="mini-count">${poopCount(week, d.key) ? "×" + poopCount(week, d.key) : "—"}</span>
               <button type="button" class="chip ghost" data-act="poop-undo" data-day="${d.key}" ${poopCount(week, d.key) ? "" : "disabled"}>Undo</button>
             </div>
@@ -543,6 +613,21 @@ function adminHtml() {
               : `<span class="chip off">No HW</span>`}
           </div>`).join("")}
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Austin’s tablet link</h2>
+      <p class="hint">Open this on the Fire tablet (or pin it to the home screen). View-only — no join or PIN.</p>
+      <p class="tablet-link" id="tablet-link-text">${escapeHtml(tabletKidUrl())}</p>
+      <button type="button" class="btn primary" id="btn-copy-tablet">Copy tablet link</button>
+      <p class="hint copy-status" id="copy-status" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>Prize log</h2>
+      ${prizeLogAdminHtml()}
+      <button type="button" class="btn ghost" id="btn-reset-spin">Reset this week’s spin</button>
+      <p class="hint">Lets Austin spin again this week if needed. Does not change sticker counts.</p>
     </section>
 
     <section class="card">
@@ -575,7 +660,7 @@ function awardRow(id, label, on) {
 function poopRow(n) {
   return `
     <div class="award-row">
-      <span class="award-label">Poop ${n ? `(${n} today)` : ""}</span>
+      <span class="award-label">Toilet ${n ? `(${n} today)` : ""}</span>
       <div class="award-btns">
         <button type="button" class="btn primary" data-award="poop" data-mode="give">Award</button>
         <button type="button" class="btn" data-award="poop" data-mode="undo" ${n ? "" : "disabled"}>Undo</button>
@@ -586,6 +671,44 @@ function poopRow(n) {
 function bindAdmin() {
   document.getElementById("btn-kid")?.addEventListener("click", () => {
     mode = "kid";
+    render();
+  });
+
+  document.getElementById("btn-copy-tablet")?.addEventListener("click", async () => {
+    const url = tabletKidUrl();
+    const status = document.getElementById("copy-status");
+    try {
+      await navigator.clipboard.writeText(url);
+      if (status) {
+        status.hidden = false;
+        status.textContent = "Copied! Open this on Austin’s Fire tablet.";
+      }
+    } catch {
+      // fallback select
+      const el = document.getElementById("tablet-link-text");
+      if (el) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      if (status) {
+        status.hidden = false;
+        status.textContent = "Select the link above and copy it.";
+      }
+    }
+  });
+
+  document.getElementById("btn-reset-spin")?.addEventListener("click", () => {
+    const weekKey = thisWeekKey();
+    if (!prizeForWeek(state, weekKey)) {
+      alert("No spin logged for this week yet.");
+      return;
+    }
+    if (!confirm("Reset this week’s prize spin so Austin can spin again?")) return;
+    clearPrizeForWeek(state, weekKey);
+    touch();
     render();
   });
   document.getElementById("btn-prev")?.addEventListener("click", () => {
