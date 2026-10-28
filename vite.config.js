@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         main: resolve(root, "index.html"),
         kid: resolve(root, "kid.html"),
+        a: resolve(root, "a/index.html"),
       },
     },
   },

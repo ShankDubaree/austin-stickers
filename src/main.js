@@ -536,9 +536,20 @@ function bindKid() {
 }
 
 
+/** Austin's Fire-Kids short path (no query string). */
+const AUSTIN_SHORT_FAMILY = "B49ZVF";
+const AUSTIN_SHORT_ID = "ff808181a09d98f701a17f21db692dcd";
+
 function tabletKidUrl() {
   const code = state.familyCode || "";
   const id = state.remoteId || "";
+  // Prefer short /a for Austin — Fire Kids allowlists choke on long ?params URLs
+  if (
+    String(code).toUpperCase() === AUSTIN_SHORT_FAMILY &&
+    String(id) === AUSTIN_SHORT_ID
+  ) {
+    return `${window.location.origin}/austin-stickers/a`;
+  }
   const base = `${window.location.origin}/austin-stickers/kid.html`;
   const params = new URLSearchParams();
   if (code) params.set("family", code);

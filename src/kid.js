@@ -65,14 +65,46 @@ function qs() {
   }
 }
 
+/** Hardcoded Austin short-link fallback when served from /a (no query). */
+const AUSTIN_SHORT = {
+  family: "B49ZVF",
+  id: "ff808181a09d98f701a17f21db692dcd",
+};
+
+function bakedDefaults() {
+  try {
+    if (window.__AUSTIN_KID_DEFAULTS__) return window.__AUSTIN_KID_DEFAULTS__;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const path = window.location.pathname || "";
+    if (/\/austin-stickers\/a\/?$/.test(path) || /\/a\/index\.html$/.test(path)) {
+      return AUSTIN_SHORT;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 function familyFromUrl() {
   const code = (qs().get("family") || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return code.slice(0, 8) || null;
+  if (code) return code.slice(0, 8);
+  const baked = bakedDefaults();
+  const fromBaked = (baked && baked.family ? String(baked.family) : "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  return fromBaked.slice(0, 8) || null;
 }
 
 function idFromUrl() {
   const id = (qs().get("id") || "").trim();
-  return id || null;
+  if (id) return id;
+  const baked = bakedDefaults();
+  const fromBaked = baked && baked.id ? String(baked.id).trim() : "";
+  return fromBaked || null;
 }
 
 function celebrate() {
