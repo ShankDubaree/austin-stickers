@@ -1,4 +1,5 @@
 import { isoWeekKey, londonDateKey, isSchoolNight } from "./week.js";
+import { mergePrizes, mergeResets } from "./prize.js";
 
 const STORAGE_KEY = "austin-stickers-v1";
 const COOKIE_NAME = "austin-stickers-fam";
@@ -125,19 +126,23 @@ export function clearLocalStorage() {
 }
 
 export function mergeRemote(local, remote) {
-  // Last-write-wins on updatedAt; keep local familyCode/remoteId
+  // Last-write-wins on updatedAt for stickers; prizes are always unioned
+  // so a stale pull/push can never silently drop a won prize.
   if (!remote) return local;
+  const resets = mergeResets(local.prizeResets, remote.prizeResets);
+  const prizes = mergePrizes(local.prizes, remote.prizes, resets);
   if ((remote.updatedAt || 0) >= (local.updatedAt || 0)) {
     return {
       ...local,
       pin: remote.pin || local.pin,
       weeks: remote.weeks || {},
-      prizes: Array.isArray(remote.prizes) ? remote.prizes : (local.prizes || []),
+      prizes,
+      prizeResets: resets,
       muteSound: remote.muteSound ?? local.muteSound,
       updatedAt: remote.updatedAt || local.updatedAt,
     };
   }
-  return local;
+  return { ...local, prizes, prizeResets: resets };
 }
 
 export function ensureWeek(state, weekKey) {

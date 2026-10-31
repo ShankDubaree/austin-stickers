@@ -42,6 +42,7 @@ import {
   addPrize,
   pickRandomPrize,
   prizeIndex,
+  mergePrizes,
   wheelCardHtml,
   animateWheelSpin,
 } from "./prize.js";
@@ -56,6 +57,56 @@ let bootError = "";
 let stopPoll = null;
 let spinning = false;
 let lastSpinPrize = null;
+let retryTimer = null;
+let retryDelay = 0;
+
+/* ---- Pending spin persistence (localStorage + cookie fallback) ---- */
+const PENDING_KEY = "austin-stickers-spin";
+function readPending() {
+  let raw = null;
+  try { raw = localStorage.getItem(PENDING_KEY); } catch { /* ignore */ }
+  if (!raw) {
+    try {
+      const m = String(document.cookie || "").match(/(?:^|;\s*)austin-spin=([^;]*)/);
+      if (m) raw = decodeURIComponent(m[1]);
+    } catch { /* ignore */ }
+  }
+  if (!raw) return null;
+  try {
+    const p = JSON.parse(raw);
+    return p && p.week && p.prize ? p : null;
+  } catch { return null; }
+}
+function writePending(p) {
+  const raw = JSON.stringify(p);
+  try { localStorage.setItem(PENDING_KEY, raw); } catch { /* ignore */ }
+  try {
+    document.cookie = `austin-spin=${encodeURIComponent(raw)}; Path=/austin-stickers/; Max-Age=${60 * 60 * 24 * 14}; SameSite=Lax`;
+  } catch { /* ignore */ }
+}
+function clearPending() {
+  try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ }
+  try { document.cookie = "austin-spin=; Path=/austin-stickers/; Max-Age=0; SameSite=Lax"; } catch { /* ignore */ }
+}
+/** Fold a locally-saved spin into state so the wheel stays locked. */
+function applyPending() {
+  const p = readPending();
+  if (!p) return null;
+  if (p.week !== thisWeekKey()) {
+    // old week: keep only until it's confirmed remotely
+  }
+  const resets = state.prizeResets || {};
+  if (resets[p.week] && resets[p.week] >= Date.parse(p.at)) {
+    clearPending(); // Dad reset after this spin
+    return null;
+  }
+  state.prizes = mergePrizes(state.prizes, [p], resets);
+  return p;
+}
+function remoteHasPending(remote, p) {
+  const list = (remote && Array.isArray(remote.prizes)) ? remote.prizes : [];
+  return list.some((x) => x && x.week === p.week && x.prize === p.prize);
+}
 
 function qs() {
   try {
@@ -181,6 +232,11 @@ function applyRemote(remote, id) {
   const before = state.updatedAt;
   state = mergeRemote(state, remote);
   if (id) state.remoteId = id;
+  const p = applyPending();
+  if (p) {
+    if (remoteHasPending(remote, p)) clearPending();
+    else schedulePush(true);
+  }
   if (state.familyCode) cacheFamilyState(state.familyCode, state);
   if (state.updatedAt !== before || id) {
     syncStatus = "ok";
@@ -208,17 +264,43 @@ function startSync() {
   );
 }
 
+function schedulePush(soon) {
+  if (retryTimer) return;
+  const wait = soon ? 300 : retryDelay;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    pushPrizeOnly();
+  }, wait);
+}
+
 async function pushPrizeOnly() {
   if (!state.familyCode || !state.remoteId) return;
+  const p = readPending();
   try {
     syncStatus = "syncing";
     render();
-    await pushFamilyRemote(state.familyCode, state.remoteId, state);
+    // Pull first so we only add the prize log on top of Dad's latest stickers.
+    const fresh = await pullByRemoteId(state.remoteId);
+    if (fresh && fresh.state) state = { ...mergeRemote(state, fresh.state), remoteId: state.remoteId };
+    applyPending();
+    if (!p || !fresh || !remoteHasPending(fresh.state, p)) {
+      const base = fresh && fresh.state ? fresh.state : state;
+      await pushFamilyRemote(state.familyCode, state.remoteId, {
+        ...base,
+        prizes: state.prizes,
+        prizeResets: state.prizeResets || base.prizeResets || {},
+      });
+    }
+    clearPending();
+    retryDelay = 0;
     cacheFamilyState(state.familyCode, state);
     syncStatus = "ok";
+    syncError = "";
   } catch (e) {
     syncStatus = "error";
-    syncError = e.message || "Could not save prize";
+    syncError = (e.message || "Could not save prize") + " — will retry";
+    retryDelay = Math.min(retryDelay ? retryDelay * 2 : 10000, 10 * 60 * 1000);
+    schedulePush(false);
   }
   render();
 }
@@ -345,13 +427,16 @@ function bindWheel() {
     const prize = pickRandomPrize();
     lastSpinPrize = prize;
     spinning = true;
+    // Lock + persist BEFORE the animation so a reload/crash can't re-spin.
+    const at = new Date().toISOString();
+    writePending({ week: viewWeek, prize, at });
+    addPrize(state, viewWeek, prize);
+    state.prizes = state.prizes.map((x) => (x.week === viewWeek ? { ...x, at } : x));
+    cacheFamilyState(state.familyCode, state);
     render();
 
     const wheelEl = document.getElementById("prize-wheel");
     animateWheelSpin(wheelEl, prizeIndex(prize), async () => {
-      addPrize(state, viewWeek, prize);
-      state.updatedAt = Date.now();
-      cacheFamilyState(state.familyCode, state);
       spinning = false;
       celebrate();
       await pushPrizeOnly();
@@ -377,6 +462,7 @@ async function boot() {
     const cached = loadCachedFamily(code);
     if (cached) {
       state = { ...cached, familyCode: code, remoteId: id || cached.remoteId };
+      applyPending();
       syncStatus = "ok";
       render();
     } else {
@@ -427,8 +513,17 @@ async function boot() {
       ...found.state,
       familyCode: code || state.familyCode,
       remoteId: found.id || id,
-      prizes: Array.isArray(found.state?.prizes) ? found.state.prizes : [],
+      prizes: mergePrizes(
+        Array.isArray(found.state?.prizes) ? found.state.prizes : [],
+        [],
+        found.state?.prizeResets
+      ),
     };
+    {
+      const p = applyPending();
+      if (p && !remoteHasPending(found.state, p)) schedulePush(true);
+      else if (p) clearPending();
+    }
     cacheFamilyState(state.familyCode, state);
     syncStatus = "ok";
     bootError = "";

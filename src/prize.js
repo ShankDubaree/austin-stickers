@@ -25,6 +25,7 @@ export function addPrize(state, weekKey, prize) {
 
 export function clearPrizeForWeek(state, weekKey) {
   const list = Array.isArray(state.prizes) ? state.prizes : [];
+  state.prizeResets = { ...(state.prizeResets || {}), [weekKey]: Date.now() };
   state.prizes = list.filter((p) => !p || p.week !== weekKey);
   return state.prizes;
 }
@@ -154,4 +155,36 @@ export function animateWheelSpin(wheelEl, landIndex, onDone) {
     wheelEl.style.transform = `rotate(${end}deg)`;
     onDone();
   }, ms);
+}
+
+function atMs(p) {
+  const t = p && p.at;
+  if (typeof t === "number") return t;
+  const n = Date.parse(t || "");
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Union two reset maps (newest reset per week wins). */
+export function mergeResets(a, b) {
+  const out = { ...(a || {}) };
+  for (const [k, v] of Object.entries(b || {})) {
+    if (!out[k] || v > out[k]) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Union prize logs by week. A week's prize survives unless the parent
+ * explicitly reset that week after it was won (prizeResets tombstone).
+ */
+export function mergePrizes(a, b, resets) {
+  const byWeek = new Map();
+  for (const p of [...(a || []), ...(b || [])]) {
+    if (!p || !p.week) continue;
+    const r = resets && resets[p.week];
+    if (r && atMs(p) <= r) continue;
+    const cur = byWeek.get(p.week);
+    if (!cur || atMs(p) > atMs(cur)) byWeek.set(p.week, p);
+  }
+  return [...byWeek.values()].sort((x, y) => atMs(y) - atMs(x)).slice(0, 52);
 }

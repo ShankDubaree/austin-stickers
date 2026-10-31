@@ -24,9 +24,108 @@ function famName(code) {
   return `fam-${code}`;
 }
 
+import { daysOfWeek } from "./week.js";
+
+/*
+ * Compact wire format (v2). api.restful-api.dev rejects (HTTP 500) payloads
+ * beyond a small size, and the verbose nested shape hit that cap at ~20
+ * stickers — so every push (incl. the prize log) started failing.
+ * Each week packs into "BBBBBBB.PPPPPPP": per day a base-16 flag digit
+ * (1=brush am, 2=brush pm, 4=sleep, 8=homework) and a base-36 poop count.
+ */
+const KEEP_WEEKS = 6;
+const KEEP_PRIZES = 12;
+
+function encWeek(weekKey, w) {
+  const days = daysOfWeek(weekKey);
+  let flags = "";
+  let poop = "";
+  for (const d of days) {
+    const b = (w.brush && w.brush[d.key]) || {};
+    let f = 0;
+    if (b.am) f |= 1;
+    if (b.pm) f |= 2;
+    if (w.sleep && w.sleep[d.key]) f |= 4;
+    if (w.homework && w.homework[d.key]) f |= 8;
+    flags += f.toString(16);
+    const c = (w.poop && w.poop[d.key] && w.poop[d.key].count) || 0;
+    poop += Math.min(35, c).toString(36);
+  }
+  return flags + "." + poop;
+}
+
+function decWeek(weekKey, str) {
+  const w = { brush: {}, poop: {}, homework: {}, sleep: {} };
+  const [flags = "", poop = ""] = String(str || "").split(".");
+  daysOfWeek(weekKey).forEach((d, i) => {
+    const f = parseInt(flags[i] || "0", 16) || 0;
+    if (f & 3) w.brush[d.key] = { ...(f & 1 ? { am: true } : {}), ...(f & 2 ? { pm: true } : {}) };
+    if (f & 4) w.sleep[d.key] = true;
+    if (f & 8) w.homework[d.key] = true;
+    const c = parseInt(poop[i] || "0", 36) || 0;
+    if (c) w.poop[d.key] = { count: c };
+  });
+  return w;
+}
+
+function atNum(at) {
+  if (typeof at === "number") return at;
+  const n = Date.parse(at || "");
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function encodeState(state) {
+  const weeks = {};
+  Object.keys(state.weeks || {}).sort().slice(-KEEP_WEEKS).forEach((k) => {
+    weeks[k] = encWeek(k, state.weeks[k]);
+  });
+  const prizes = (Array.isArray(state.prizes) ? state.prizes : [])
+    .filter((p) => p && p.week && p.prize)
+    .slice(0, KEEP_PRIZES)
+    .map((p) => `${p.week}|${p.prize}|${atNum(p.at).toString(36)}`)
+    .join(";");
+  const resets = Object.entries(state.prizeResets || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, KEEP_PRIZES)
+    .map(([k, v]) => `${k}|${Number(v).toString(36)}`)
+    .join(";");
+  const out = { v: 2, pin: state.pin, u: state.updatedAt, w: weeks, p: prizes };
+  if (resets) out.r = resets;
+  if (state.muteSound === false) out.m = 0;
+  return out;
+}
+
+/** Accepts v2 compact or legacy v1 verbose data. */
+export function decodeState(data) {
+  if (!data || data.v !== 2) return data || {};
+  const weeks = {};
+  for (const [k, str] of Object.entries(data.w || {})) weeks[k] = decWeek(k, str);
+  const prizes = String(data.p || "")
+    .split(";")
+    .filter(Boolean)
+    .map((s) => {
+      const [week, prize, at] = s.split("|");
+      return { week, prize, at: new Date(parseInt(at, 36) || 0).toISOString() };
+    });
+  const prizeResets = {};
+  String(data.r || "").split(";").filter(Boolean).forEach((s) => {
+    const [k, v] = s.split("|");
+    prizeResets[k] = parseInt(v, 36) || 0;
+  });
+  return {
+    v: 1,
+    pin: data.pin,
+    updatedAt: data.u,
+    weeks,
+    prizes,
+    prizeResets,
+    muteSound: data.m === 0 ? false : true,
+  };
+}
+
 function stripLocal(state) {
   const { familyCode, remoteId, role, ...rest } = state;
-  return rest;
+  return encodeState(rest);
 }
 
 function networkError(err, fallback) {
@@ -165,7 +264,7 @@ export async function pullFamilyRemote(code, id) {
   try {
     const doc = await fetchJson(`${SYNC_BASE}/${encodeURIComponent(id)}`);
     if (!doc) return null;
-    const remoteState = doc.data != null ? doc.data : {};
+    const remoteState = decodeState(doc.data != null ? doc.data : {});
     return { id: doc.id || id, state: remoteState };
   } catch (e) {
     if (e.message && e.message.includes("(404)")) {
@@ -178,7 +277,7 @@ export async function pullFamilyRemote(code, id) {
           if (doc) {
             return {
               id: doc.id || alt,
-              state: doc.data != null ? doc.data : {},
+              state: decodeState(doc.data != null ? doc.data : {}),
             };
           }
         }
